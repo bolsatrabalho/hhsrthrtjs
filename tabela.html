@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Sistema de Frequência de Bolsistas</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f6f8;
+    padding: 20px;
+}
+.container {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+th, td {
+    border: 1px solid #ccc;
+    padding: 6px;
+    text-align: center;
+}
+th {
+    background: #f0f0f0;
+}
+button {
+    padding: 6px 10px;
+    border: none;
+    border-radius: 4px;
+    background: #0057b8;
+    color: #fff;
+    cursor: pointer;
+    margin-right: 5px;
+}
+button:hover {
+    background: #004494;
+}
+.hidden { display: none; }
+input, select {
+    width: 100%;
+    font-size: 12px;
+}
+.msg {
+    margin-top: 10px;
+    color: green;
+    font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h2>Sistema de Frequência de Bolsistas</h2>
+<div id="infoUsuario"></div>
+
+<div style="margin:10px 0;">
+    <button id="btnAdicionar" onclick="adicionarBolsista()">➕ Adicionar Bolsista</button>
+    <button onclick="salvar()">💾 Salvar</button>
+    <button onclick="enviarPlanilha()">📤 Enviar Planilha</button>
+</div>
+
+<div class="msg" id="msg"></div>
+
+<table>
+<thead>
+<tr>
+    <th>Campus</th>
+    <th>Nome</th>
+    <th>Matrícula</th>
+    <th>Setor</th>
+    <th>Início</th>
+    <th>Fim</th>
+    <th>Email Coordenador</th>
+    <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th>
+    <th>Mai</th><th>Jun</th><th>Jul</th><th>Ago</th>
+    <th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
+    <th>Justificativa</th>
+    <th>Arquivo</th>
+    <th>Ações</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const URL_APPS = "https://script.google.com/macros/s/AKfycbwsBRzT6ddT8pMjuboSOHqzJ0U8HFHnTyW_y1V2QVD8pKDisVjB56y9-ffEpIbPXFNqXA/exec";
+const EMAIL_ADMIN = "bolsatrabalho@prex.uespi.br";
+
+/* ================= LOGIN ================= */
+const emailUsuario = sessionStorage.getItem("coordenadorLogado");
+if (!emailUsuario) {
+    alert("Acesso inválido.");
+    window.location.href = "index.html";
+}
+const tipoUsuario = emailUsuario === EMAIL_ADMIN ? "admin" : "coordenador";
+
+document.getElementById("infoUsuario").innerText =
+    `Usuário: ${emailUsuario} | Perfil: ${tipoUsuario}`;
+
+if (tipoUsuario !== "admin") {
+    document.getElementById("btnAdicionar").classList.add("hidden");
+}
+
+/* ================= DADOS ================= */
+let bolsistas = [];
+
+/* ================= CARREGAR ================= */
+function carregarBolsistas() {
+    fetch(`${URL_APPS}?acao=listar&email=${encodeURIComponent(emailUsuario)}`)
+        .then(r => r.json())
+        .then(d => {
+            bolsistas = d.dados.map(l => ({
+                campus: l[0],
+                nome: l[1],
+                matricula: l[2],
+                setor: l[3],
+                inicio: l[4],
+                fim: l[5],
+                coordenador: l[6],
+                Jan: l[7], Fev: l[8], Mar: l[9], Abr: l[10],
+                Mai: l[11], Jun: l[12], Jul: l[13], Ago: l[14],
+                Set: l[15], Out: l[16], Nov: l[17], Dez: l[18],
+                justificativa: l[19]
+            }));
+            renderTabela();
+        })
+        .catch(() => alert("Erro ao carregar dados"));
+}
+
+/* ================= TABELA ================= */
+function renderTabela() {
+    const tbody = document.getElementById("tbody");
+    tbody.innerHTML = "";
+
+    bolsistas.forEach((b, i) => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${campo(b.campus, i, "campus")}</td>
+            <td>${campo(b.nome, i, "nome")}</td>
+            <td>${campo(b.matricula, i, "matricula")}</td>
+            <td>${campo(b.setor, i, "setor")}</td>
+            <td>${campoData(b.inicio, i, "inicio")}</td>
+            <td>${campoData(b.fim, i, "fim")}</td>
+            <td>${campo(b.coordenador, i, "coordenador")}</td>
+            ${mesesHTML(b, i)}
+            <td><input type="text" value="${b.justificativa||""}" onchange="bolsistas[${i}].justificativa=this.value"></td>
+            <td><input type="file" onchange="uploadArquivo(event, ${i})"></td>
+            <td>${tipoUsuario==="admin"?`<button onclick="removerBolsista(${i})">Remover</button>`:""}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function campo(v, i, c) {
+    if (tipoUsuario !== "admin") return v || "";
+    return `<input type="text" value="${v||""}" onchange="bolsistas[${i}].${c}=this.value">`;
+}
+function campoData(v, i, c) {
+    if (tipoUsuario !== "admin") return v || "";
+    return `<input type="date" value="${v||""}" onchange="bolsistas[${i}].${c}=this.value">`;
+}
+
+function mesesHTML(b, i) {
+    const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+    return meses.map(m => `
+        <td>
+            <select onchange="bolsistas[${i}]['${m}']=this.value">
+                <option value=""></option>
+                <option value="SIM" ${b[m]==="SIM"?"selected":""}>SIM</option>
+                <option value="NÃO" ${b[m]==="NÃO"?"selected":""}>NÃO</option>
+            </select>
+        </td>
+    `).join("");
+}
+
+/* ================= AÇÕES ================= */
+function adicionarBolsista() {
+    bolsistas.push({
+        campus:"", nome:"", matricula:"",
+        setor:"", inicio:"", fim:"",
+        coordenador:"", justificativa:""
+    });
+    renderTabela();
+}
+
+function removerBolsista(i) {
+    if (confirm("Remover bolsista?")) {
+        bolsistas.splice(i,1);
+        renderTabela();
+    }
+}
+
+function salvar() {
+    document.getElementById("msg").innerText = "✔ Dados salvos localmente";
+}
+
+/* ================= UPLOAD ================= */
+function uploadArquivo(e, i) {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 10*1024*1024) {
+        alert("Arquivo maior que 10MB");
+        return;
+    }
+    const r = new FileReader();
+    r.onload = () => {
+        bolsistas[i].arquivoBase64 = r.result.split(",")[1];
+        bolsistas[i].arquivoNome = f.name;
+        bolsistas[i].arquivoMime = f.type;
+    };
+    r.readAsDataURL(f);
+}
+
+/* ================= ENVIO ================= */
+function enviarPlanilha() {
+    fetch(URL_APPS, {
+        method: "POST",
+        body: JSON.stringify(bolsistas)
+    })
+    .then(r => r.json())
+    .then(d => {
+        document.getElementById("msg").innerText = "✔ Dados enviados com sucesso";
+        carregarBolsistas();
+    })
+    .catch(() => alert("Erro de conexão com servidor"));
+}
+
+/* ================= INIT ================= */
+carregarBolsistas();
+</script>
+
+</body>
+</html>
